@@ -8,7 +8,11 @@ import { errorHandler } from './middlewares/errorHandler.js';
 import cookieParser from 'cookie-parser';
 import { UPLOAD_DIR } from './constants/index.js';
 import swaggerUi from 'swagger-ui-express';
-import swaggerDocument from '../docs/swagger.json' assert { type: 'json' };
+import { createRequire } from 'module';
+
+// Используем require для импорта JSON
+const require = createRequire(import.meta.url);
+const swaggerDocument = require('../docs/swagger.json');
 
 export async function setupServer() {
   try {
