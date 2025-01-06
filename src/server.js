@@ -2,17 +2,19 @@ import express from 'express';
 import pino from 'pino-http';
 import cors from 'cors';
 import { env } from './utils/env.js';
-// import contactsRouter from './routers/contacts.js';
 import router from './routers/index.js';
 import { notFoundHandler } from './middlewares/notFoundHandler.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import cookieParser from 'cookie-parser';
 import { UPLOAD_DIR } from './constants/index.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerDocument from '../docs/swagger.json' assert { type: 'json' };
 
 export async function setupServer() {
   try {
     const app = express();
     const PORT = Number(env('PORT', '3000'));
+
     app.use(express.json());
     app.use(cors());
     app.use(cookieParser());
@@ -31,14 +33,22 @@ export async function setupServer() {
       });
     });
 
+    // Serve static files for uploads
     app.use('/uploads', express.static(UPLOAD_DIR));
 
+    // Serve Swagger documentation
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+    // Main API routes
     app.use(router);
 
+    // Handle 404
     app.use('*', notFoundHandler);
 
+    // General error handler
     app.use(errorHandler);
 
+    // Start the server
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
