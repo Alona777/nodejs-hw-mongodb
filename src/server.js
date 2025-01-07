@@ -1,55 +1,36 @@
 import express from 'express';
 import pino from 'pino-http';
 import cors from 'cors';
-import { env } from './utils/env.js';
 import cookieParser from 'cookie-parser';
-
-import router from './routers/index.js';
+import { env } from './utils/env.js';
+import contactsRouter from './routers/contacts.js';
+import authRouter from './routers/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { notFoundHandler } from './middlewares/notFoundHandler.js';
 
+const PORT = Number(env('PORT', '3000'));
 
+export const startServer = () => {
+  const app = express();
 
-export async function setupServer() {
-  try {
-    const app = express();
-    const PORT = Number(env('PORT', '3000'));
-    app.use(express.json());
-    app.use(cors());
-    app.use(cookieParser());
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use(cors());
+  app.use(
+    pino({
+      transport: {
+        target: 'pino-pretty',
+      },
+    }),
+  );
 
-    app.use(
-      pino({
-        transport: {
-          target: 'pino-pretty',
-        },
-      }),
-    );
+  app.use('/contacts', contactsRouter);
+  app.use('/auth', authRouter);
 
-    app.get('/', (req, res) => {
-      res.json({
-        message: 'Hello world',
-      });
-    });
+  app.use('*', notFoundHandler);
+  app.use(errorHandler);
 
-    app.use(router);
-    app.use('*', notFoundHandler);
-    app.use('*', errorHandler);
-
-
-   
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-
-
-
-
-
-
-
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+};

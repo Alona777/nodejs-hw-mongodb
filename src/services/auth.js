@@ -1,89 +1,96 @@
-import { randomBytes } from 'crypto'
+import { User } from '../db/models/user.js';
 import bcrypt from 'bcrypt';
-import { UsersCollection } from '../db/models/user.js';
 import createHttpError from 'http-errors';
-
+import { Session } from '../db/models/session.js';
 import { FIFTEEN_MINUTES, ONE_DAY } from '../constants/index.js';
-import { SessionsCollection } from '../db/models/session.js'
+import { randomBytes } from 'crypto';
 
+export const registerUser = async ({ name, email, password }) => {
+  const userExists = await User.findOne({ email });
+  if (userExists) {
+    throw createHttpError(409, 'Email in use');
+  }
 
-export const registerUser = async (payload) => {
-  const user = await UsersCollection.findOne({ email: payload.email });
-  if (user) throw createHttpError(409, 'Email in use');
-  
-  const encryptedPassword = await bcrypt.hash(payload.password, 10);
-
-  return await UsersCollection.create({
-    ...payload,
-    password: encryptedPassword,
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const newUser = await User.create({
+    name,
+    email,
+    password: hashedPassword,
   });
+
+  return {
+    id: newUser._id,
+    name: newUser.name,
+    email: newUser.email,
+  };
 };
 
-export const loginUser = async (payload) => {
-  const user = await UsersCollection.findOne({ email: payload.email });
+export const loginUser = async ({ email, password }) => {
+  const user = await User.findOne({ email });
   if (!user) {
-    throw createHttpError(404, 'User not found');
-  }
-  const isEqual = await bcrypt.compare(payload.password, user.password);
-
-  if (!isEqual) {
-    throw createHttpError(401, 'Unauthorized');
+    throw createHttpError(401, 'Invalid email or password');
   }
 
-  await SessionsCollection.deleteOne({ userId: user._id });
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw createHttpError(401, 'Invalid email or password');
+  }
+
+  await Session.deleteMany({ userId: user._id });
 
   const accessToken = randomBytes(30).toString('base64');
   const refreshToken = randomBytes(30).toString('base64');
 
-  return await SessionsCollection.create({
+  const session = await Session.create({
     userId: user._id,
     accessToken,
     refreshToken,
     accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
+    refreshTokenValidUntil: new Date(Date.now() + ONE_DAY * 30),
   });
-};
-  
-
-export const logoutUser = async (sessionId) => {
-  await SessionsCollection.deleteOne({ _id: sessionId });
-};
-
-const createSession = () => {
-  const accessToken = randomBytes(30).toString('base64');
-  const refreshToken = randomBytes(30).toString('base64');
 
   return {
-    accessToken,
-    refreshToken,
-    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + ONE_DAY),
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    _id: session._id,
   };
 };
 
+export const logoutUser = async (sessionId) => {
+  await Session.deleteOne({ _id: sessionId });
+};
+
 export const refreshUsersSession = async ({ sessionId, refreshToken }) => {
-  const session = await SessionsCollection.findOne({
+  const session = await Session.findOne({
     _id: sessionId,
     refreshToken,
   });
-
   if (!session) {
-    throw createHttpError(401, 'Session not found');
+    throw createHttpError(401, 'Invalid session or token');
   }
 
-  const isSessionTokenExpired =
+  const isRefreshTokenExpired =
     new Date() > new Date(session.refreshTokenValidUntil);
 
-  if (isSessionTokenExpired) {
-    throw createHttpError(401, 'Session token expired');
+  if (isRefreshTokenExpired) {
+    throw createHttpError(401, 'Refresh token expired');
   }
-  
-  const newSession = createSession();
 
-  await SessionsCollection.deleteOne({ _id: sessionId, refreshToken });
+  const newAccessToken = randomBytes(30).toString('base64');
+  const newRefreshToken = randomBytes(30).toString('base64');
 
-  return await SessionsCollection.create({
-    userId: session.userId,
-    ...newSession,
-  });
+  await Session.updateOne(
+    { _id: session._id },
+    {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+      refreshTokenValidUntil: new Date(Date.now() + ONE_DAY * 30),
+    },
+  );
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  };
 };

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { env } from '../utils/env.js';
 
-export const initMongoDB = async () => {
+const initMongoDB = async () => {
   try {
     const user = env('MONGODB_USER');
     const pwd = env('MONGODB_PASSWORD');
@@ -9,11 +9,13 @@ export const initMongoDB = async () => {
     const db = env('MONGODB_DB');
 
     await mongoose.connect(
-      `mongodb+srv://${user}:${pwd}@${url}/${db}?retryWrites=true&w=majority`,
+      `mongodb+srv://${user}:${pwd}@${url}/${db}?retryWrites=true&w=majority`
     );
     console.log('Mongo connection successfully established!');
-  } catch(error) {
-    console.log(`Error connect database with message ${error.message}`);
+  } catch (error) {
+    console.error('Error while setting up MongoDB connection:', error.message);
     throw error;
   }
 };
+
+export default initMongoDB;
